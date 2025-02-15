@@ -220,17 +220,21 @@ function insert_linkinds!(A; left_dir=ITensors.Out)
 end
 
 function UniformMPS(s::CelledVector, f::Function; left_dir=ITensors.Out)
-  sᶜ¹ = s[Cell(1)]
-  A = InfiniteMPS([ITensor(sⁿ) for sⁿ in sᶜ¹], translator(s))
-  #A.data.translator = translator(s)
-  N = length(sᶜ¹)
-  for n in 1:N
-    Aⁿ = A[n]
-    Aⁿ[indval(s[n] => f(n))] = 1.0
-    A[n] = Aⁿ
-  end
-  insert_linkinds!(A; left_dir=left_dir)
-  return A
+    sᶜ¹ = s[Cell(1)]
+    A = InfiniteMPS([ITensor(sⁿ) for sⁿ in sᶜ¹], translator(s))
+    #A.data.translator = translator(s)
+    N = length(sᶜ¹)
+    for n in 1:N
+        this_state = f(n)
+        Aⁿ = if this_state isa String
+            state(s[n], this_state)
+        else
+            itensor(this_state, s[n])
+        end
+        A[n] = Aⁿ
+    end
+    insert_linkinds!(A; left_dir=left_dir)
+    return A
 end
 
 function InfMPS(s::CelledVector, f::Function)
