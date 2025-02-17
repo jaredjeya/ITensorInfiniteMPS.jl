@@ -1,4 +1,4 @@
-using ITensorMPS: ITensorMPS, linkinds, tdvp
+using ITensorMPS: ITensorMPS, linkinds, tdvp, update_observer!, checkdone!
 using ITensors: δ, dag, noprime, prime
 using ITensors.NDTensors: denseblocks
 using KrylovKit: exponentiate
@@ -166,7 +166,10 @@ function ITensorMPS.tdvp(
   outputlevel=1,
   multisite_update_alg="sequential",
   time_step,
+  init_time=0.0,
   solver_tol=(x -> x / 100),
+  (observer!)=ITensorMPS.default_observer(),
+  checkdone=ITensorMPS.default_checkdone(),
 )
   N = nsites(ψ)
   (ϵᴸ!) = fill(tol, nsites(ψ))
@@ -177,6 +180,8 @@ function ITensorMPS.tdvp(
     flush(stdout)
     flush(stderr)
   end
+
+  cur_time = init_time
   for iter in 1:maxiter
     iteration_time = @elapsed ψ, (eᴸ, eᴿ) = tdvp_iteration(
       solver,
@@ -189,6 +194,10 @@ function ITensorMPS.tdvp(
       time_step=time_step,
       eager,
     )
+    cur_time += time_step
+
+    update_observer!(observer!; state=ψ, operator=∑h, sweep=iter, outputlevel, cur_time)
+
     ϵᵖʳᵉˢ = max(maximum(ϵᴸ!), maximum(ϵᴿ!))
     maxdimψ = maxlinkdim(ψ[0:(N + 1)])
     if outputlevel > 0
@@ -215,8 +224,10 @@ function ITensorMPS.tdvp(
       end
       break
     end
+
+    checkdone(; state=ψ, sweep=iter, outputlevel, observer=observer!)
   end
-  return ψ
+  return ψ, cur_time
 end
 
 function vumps_solver(M, time_step, v₀, solver_tol, eager=true)
