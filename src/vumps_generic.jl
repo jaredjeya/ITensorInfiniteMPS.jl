@@ -171,6 +171,7 @@ function ITensorMPS.tdvp(
   N = nsites(ψ)
   (ϵᴸ!) = fill(tol, nsites(ψ))
   (ϵᴿ!) = fill(tol, nsites(ψ))
+
   if outputlevel > 0
     println("Running VUMPS with multisite_update_alg = $multisite_update_alg")
     flush(stdout)
@@ -191,18 +192,27 @@ function ITensorMPS.tdvp(
     ϵᵖʳᵉˢ = max(maximum(ϵᴸ!), maximum(ϵᴿ!))
     maxdimψ = maxlinkdim(ψ[0:(N + 1)])
     if outputlevel > 0
-      println(
-        "VUMPS iteration $iter (out of maximum $maxiter). Bond dimension = $maxdimψ, energy = $((eᴸ, eᴿ)), ϵᵖʳᵉˢ = $ϵᵖʳᵉˢ, tol = $tol, iteration time = $iteration_time seconds",
+      @printf(
+        "VUMPS iteration %d (out of maximum %d). Bond dimension = %d, energy = (%s, %s), ϵᵖʳᵉˢ = %.3e, tol = %.1e, iteration time = %.2f seconds\n",
+        iter,
+        maxiter,
+        maxdimψ,
+        round.(real(eᴸ); digits=6),
+        round.(real(eᴿ); digits=6),
+        ϵᵖʳᵉˢ,
+        tol,
+        iteration_time
       )
       flush(stdout)
       flush(stderr)
     end
+
     if ϵᵖʳᵉˢ < tol
-      println(
-        "Precision error $ϵᵖʳᵉˢ reached tolerance $tol, stopping VUMPS after $iter iterations (of a maximum $maxiter).",
-      )
-      flush(stdout)
-      flush(stderr)
+      if outputlevel > 0
+        @printf "Precision error %.3e reached tolerance %.1e, stopping VUMPS after %d iterations (of a maximum %d).\n" ϵᵖʳᵉˢ tol iter maxiter
+        flush(stdout)
+        flush(stderr)
+      end
       break
     end
   end
@@ -238,21 +248,25 @@ function vumps(
 end
 
 function ITensorMPS.tdvp(
-  args...; time_step, solver_tol=(x -> x / 100), eager=true, kwargs...
+  args...; time_step, solver_tol=(x -> x / 100), eager=true, outputlevel=0, kwargs...
 )
   solver = if !isinf(time_step)
-    println("Using TDVP solver with time step $time_step")
-    flush(stdout)
-    flush(stderr)
+    outputlevel > 0 && println("Using TDVP solver with time step $time_step")
     tdvp_solver
   elseif time_step < 0
     # Call VUMPS instead
-    println("Using VUMPS solver with time step $time_step")
-    flush(stdout)
-    flush(stderr)
+    outputlevel > 0 && println("Using VUMPS solver with time step $time_step")
     vumps_solver
   else
     error("Time step $time_step not supported.")
   end
-  return tdvp(solver, args...; time_step=time_step, solver_tol=solver_tol, eager, kwargs...)
+  return tdvp(
+    solver,
+    args...;
+    time_step=time_step,
+    solver_tol=solver_tol,
+    eager,
+    outputlevel,
+    kwargs...,
+  )
 end

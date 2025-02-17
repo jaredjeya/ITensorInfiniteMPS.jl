@@ -17,6 +17,8 @@ using QuadGK
 # with the unit cell terms into terms acting on each
 # site.
 using SplitApplyCombine
+# For formatting output properly
+using Printf
 
 using ITensors.NDTensors: eachdiagblock
 using KrylovKit: eigsolve, linsolve, exponentiate

@@ -160,11 +160,12 @@ function generate_twobody_nullspace(
   end
   return noprime(ψH2)
 end
+
 # atol controls the tolerance cutoff for determining which eigenvectors are in the null
 # space of the isometric MPS tensors. Setting to 1e-2 since we only want to keep
 # the eigenvectors corresponding to eigenvalues of approximately 1.
 function subspace_expansion(
-  ψ::InfiniteCanonicalMPS, H, b::Tuple{Int,Int}; maxdim, cutoff, atol=1e-2, kwargs...
+  ψ::InfiniteCanonicalMPS, H, b::Tuple{Int,Int}; maxdim, cutoff, atol=1e-2, outputlevel=0, kwargs...
 )
   n1, n2 = b
   lⁿ¹ = commoninds(ψ.AL[n1], ψ.C[n1])
@@ -180,9 +181,11 @@ function subspace_expansion(
   dʳ = dim(rⁿ¹)
   @assert dˡ == dʳ
   if dˡ ≥ maxdim
-    println(
-      "Current bond dimension at bond $b is $dˡ while desired maximum dimension is $maxdim, skipping bond dimension increase at $b",
-    )
+    if outputlevel > 0
+      println(
+        "Current bond dimension at bond $b is $dˡ while desired maximum dimension is $maxdim, skipping bond dimension increase at $b",
+      )
+    end
     flush(stdout)
     flush(stderr)
     return (ψ.AL[n1], ψ.AL[n2]), ψ.C[n1], (ψ.AR[n1], ψ.AR[n2])
@@ -198,9 +201,11 @@ function subspace_expansion(
 
   #Added due to crash during testing
   if norm(ψHN2.tensor) < 1e-12
-    println(
-      "The two-site subspace expansion produced a zero-norm expansion at $b. This is likely due to the long-range nature of the QN conserving Hamiltonian.",
-    )
+    if outputlevel > 0
+      println(
+        "The two-site subspace expansion produced a zero-norm expansion at $b. This is likely due to the long-range nature of the QN conserving Hamiltonian.",
+      )
+    end
     flush(stdout)
     flush(stderr)
     return (ψ.AL[n1], ψ.AL[n2]), ψ.C[n1], (ψ.AR[n1], ψ.AR[n2])
