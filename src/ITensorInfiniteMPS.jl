@@ -29,7 +29,6 @@ using ITensorMPS: AbstractMPS
 import ITensors: ⊕
 
 include("ITensors.jl")
-include("ITensorNetworks.jl")
 include("itensormap.jl")
 include("celledvectors.jl")
 include("abstractinfinitemps.jl")
@@ -63,7 +62,6 @@ export Cell,
   InfiniteBlockMPO,
   InfiniteSumLocalOps,
   ITensorMap,
-  ITensorNetwork,
   TransferMatrix,
   @Model_str,
   Model,
