@@ -170,6 +170,7 @@ function ITensorMPS.tdvp(
   solver_tol=(x -> x / 100),
   (observer!)=ITensorMPS.default_observer(),
   checkdone=ITensorMPS.default_checkdone(),
+  save_func=nothing
 )
   N = nsites(ψ)
   (ϵᴸ!) = fill(tol, nsites(ψ))
@@ -182,50 +183,61 @@ function ITensorMPS.tdvp(
   end
 
   cur_time = init_time
-  for iter in 1:maxiter
-    iteration_time = @elapsed ψ, (eᴸ, eᴿ) = tdvp_iteration(
-      solver,
-      ∑h,
-      ψ;
-      (ϵᴸ!)=(ϵᴸ!),
-      (ϵᴿ!)=(ϵᴿ!),
-      multisite_update_alg=multisite_update_alg,
-      solver_tol=solver_tol,
-      time_step=time_step,
-      eager,
-    )
-    cur_time += time_step
 
-    update_observer!(observer!; state=ψ, operator=∑h, sweep=iter, outputlevel, cur_time)
-
-    ϵᵖʳᵉˢ = max(maximum(ϵᴸ!), maximum(ϵᴿ!))
-    maxdimψ = maxlinkdim(ψ[0:(N + 1)])
-    if outputlevel > 0
-      @printf(
-        "VUMPS iteration %d (out of maximum %d). Bond dimension = %d, energy = (%s, %s), ϵᵖʳᵉˢ = %.3e, tol = %.1e, iteration time = %.2f seconds\n",
-        iter,
-        maxiter,
-        maxdimψ,
-        round.(real(eᴸ); digits=6),
-        round.(real(eᴿ); digits=6),
-        ϵᵖʳᵉˢ,
-        tol,
-        iteration_time
+  try
+    for iter in 1:maxiter
+      iteration_time = @elapsed ψ, (eᴸ, eᴿ) = tdvp_iteration(
+        solver,
+        ∑h,
+        ψ;
+        (ϵᴸ!)=(ϵᴸ!),
+        (ϵᴿ!)=(ϵᴿ!),
+        multisite_update_alg=multisite_update_alg,
+        solver_tol=solver_tol,
+        time_step=time_step,
+        eager,
       )
-      flush(stdout)
-      flush(stderr)
-    end
+      cur_time += time_step
 
-    if ϵᵖʳᵉˢ < tol
+      update_observer!(observer!; state=ψ, operator=∑h, sweep=iter, outputlevel, cur_time)
+
+      ϵᵖʳᵉˢ = max(maximum(ϵᴸ!), maximum(ϵᴿ!))
+      maxdimψ = maxlinkdim(ψ[0:(N + 1)])
       if outputlevel > 0
-        @printf "Precision error %.3e reached tolerance %.1e, stopping VUMPS after %d iterations (of a maximum %d).\n" ϵᵖʳᵉˢ tol iter maxiter
+        @printf(
+          "VUMPS iteration %d (out of maximum %d). Bond dimension = %d, energy = (%s, %s), ϵᵖʳᵉˢ = %.3e, tol = %.1e, iteration time = %.2f seconds\n",
+          iter,
+          maxiter,
+          maxdimψ,
+          round.(real(eᴸ); digits=6),
+          round.(real(eᴿ); digits=6),
+          ϵᵖʳᵉˢ,
+          tol,
+          iteration_time
+        )
         flush(stdout)
         flush(stderr)
       end
-      break
-    end
 
-    checkdone(; state=ψ, sweep=iter, outputlevel, observer=observer!)
+      if ϵᵖʳᵉˢ < tol
+        if outputlevel > 0
+          @printf "Precision error %.3e reached tolerance %.1e, stopping VUMPS after %d iterations (of a maximum %d).\n" ϵᵖʳᵉˢ tol iter maxiter
+          flush(stdout)
+          flush(stderr)
+        end
+        break
+      end
+
+      checkdone(; state=ψ, sweep=iter, outputlevel, observer=observer!)
+    end
+  catch e
+    isa(e, InterruptException) || rethrow()
+    if outputlevel > 0
+      @printf "Caught interrupt, stopping VUMPS.\n"
+      flush(stdout)
+      flush(stderr)
+    end
+    isnothing(save_func) || save_func(ψ, observer!)
   end
   return ψ, cur_time
 end
