@@ -267,7 +267,7 @@ function vumps(
   flush(stderr)
   return tdvp(
     vumps_solver, args...; time_step=time_step, solver_tol=solver_tol, eager, kwargs...
-  )
+  )[1]
 end
 
 function ITensorMPS.tdvp(

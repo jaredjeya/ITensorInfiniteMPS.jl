@@ -63,12 +63,12 @@ end
 
     Hmpo = InfiniteBlockMPO(model, s; model_kwargs...)
     # Alternate steps of running VUMPS and increasing the bond dimension
-    ψ = tdvp(Hmpo, ψ; vumps_kwargs...)
+    ψ, _ = tdvp(Hmpo, ψ; vumps_kwargs...)
     for _ in 1:outer_iters
       println("Subspace expansion")
       ψ = @time subspace_expansion(ψ, Hmpo; subspace_expansion_kwargs...)
       println("TDVP")
-      ψ = @time tdvp(Hmpo, ψ; vumps_kwargs...)
+      ψ, _ = @time tdvp(Hmpo, ψ; vumps_kwargs...)
     end
 
     @test norm(contract(ψ.AL[1:N]..., ψ.C[N]) - contract(ψ.C[0], ψ.AR[1:N]...)) ≈ 0 atol =
@@ -135,10 +135,10 @@ end
 
     Hmpo = InfiniteBlockMPO(model, s; model_kwargs...)
     # Alternate steps of running VUMPS and increasing the bond dimension
-    ψ = tdvp(Hmpo, ψ; vumps_kwargs...)
+    ψ, _ = tdvp(Hmpo, ψ; vumps_kwargs...)
     for _ in 1:outer_iters
       ψ = subspace_expansion(ψ, Hmpo; subspace_expansion_kwargs...)
-      ψ = tdvp(Hmpo, ψ; vumps_kwargs...)
+      ψ, _ = tdvp(Hmpo, ψ; vumps_kwargs...)
     end
 
     @test norm(
@@ -220,10 +220,10 @@ end
 
     Hmpo = InfiniteBlockMPO(model, s; model_kwargs...)
     # Alternate steps of running VUMPS and increasing the bond dimension
-    ψ = tdvp(Hmpo, ψ; vumps_kwargs...)
+    ψ, _ = tdvp(Hmpo, ψ; vumps_kwargs...)
     for _ in 1:outer_iters
       ψ = subspace_expansion(ψ, Hmpo; subspace_expansion_kwargs...)
-      ψ = tdvp(Hmpo, ψ; vumps_kwargs...)
+      ψ, _ = tdvp(Hmpo, ψ; vumps_kwargs...)
     end
 
     @test norm(

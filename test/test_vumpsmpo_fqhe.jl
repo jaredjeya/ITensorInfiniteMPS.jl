@@ -86,12 +86,12 @@ end
 
     Hmpo = InfiniteBlockMPO(model, s; model_kwargs...)
     # Alternate steps of running VUMPS and increasing the bond dimension
-    ψ = tdvp(Hmpo, ψ; vumps_kwargs...)
+    ψ, _ = tdvp(Hmpo, ψ; vumps_kwargs...)
     for _ in 1:outer_iters
       println("Subspace expansion")
       ψ = @time subspace_expansion(ψ, Hmpo; subspace_expansion_kwargs...)
       println("TDVP")
-      ψ = @time tdvp(Hmpo, ψ; vumps_kwargs...)
+      ψ, _ = @time tdvp(Hmpo, ψ; vumps_kwargs...)
     end
   end
 end

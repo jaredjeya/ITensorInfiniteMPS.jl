@@ -81,7 +81,7 @@ end
     # Alternate steps of running VUMPS and increasing the bond dimension
     for _ in 1:outer_iters
       ψ = subspace_expansion(ψ, H; subspace_expansion_kwargs...)
-      ψ = @time tdvp(H, ψ; vumps_kwargs...)
+      ψ, _ = @time tdvp(H, ψ; vumps_kwargs...)
     end
 
     # Check translational invariance
@@ -172,7 +172,7 @@ end
     # Alternate steps of running VUMPS and increasing the bond dimension
     for _ in 1:outer_iters
       ψ = subspace_expansion(ψ, H; subspace_expansion_kwargs...)
-      ψ = tdvp(H, ψ; vumps_kwargs...)
+      ψ, _ = tdvp(H, ψ; vumps_kwargs...)
     end
 
     # Check translational invariance

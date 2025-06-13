@@ -63,10 +63,10 @@ end
     # Check translational invariance
     @test contract(ψ.AL[1:nsites]..., ψ.C[nsites]) ≈ contract(ψ.C[0], ψ.AR[1:nsites]...)
 
-    ψ = tdvp(H, ψ; vumps_kwargs...)
+    ψ, _ = tdvp(H, ψ; vumps_kwargs...)
     for _ in 1:outer_iters
       ψ = subspace_expansion(ψ, H; subspace_expansion_kwargs...)
-      ψ = tdvp(H, ψ; vumps_kwargs...)
+      ψ, _ = tdvp(H, ψ; vumps_kwargs...)
     end
     # Check translational invariance
     @test norm(

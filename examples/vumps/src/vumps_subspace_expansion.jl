@@ -15,7 +15,7 @@ function tdvp_subspace_expansion(
     )
     ψ = @time subspace_expansion(ψ, H; subspace_expansion_kwargs...)
     println("\nRun VUMPS with new bond dimension $(maxlinkdim(ψ))")
-    ψ = @time tdvp(H, ψ; time_step=time_step, vumps_kwargs...)
+    ψ, _ = @time tdvp(H, ψ; time_step=time_step, vumps_kwargs...)
   end
   return ψ
 end
