@@ -176,6 +176,7 @@ function ITensorMPS.tdvp(
   N = nsites(ψ)
   (ϵᴸ!) = fill(tol, nsites(ψ))
   (ϵᴿ!) = fill(tol, nsites(ψ))
+  ϵᵖʳᵉˢ = Inf
 
   if outputlevel > 0
     println("Running VUMPS with multisite_update_alg = $multisite_update_alg")
@@ -240,7 +241,7 @@ function ITensorMPS.tdvp(
     end
     isnothing(save_func) || save_func(ψ, observer!)
   end
-  return ψ, cur_time
+  return ψ, cur_time, ϵᵖʳᵉˢ
 end
 
 function vumps_solver(M, time_step, v₀, solver_tol, eager=true)
