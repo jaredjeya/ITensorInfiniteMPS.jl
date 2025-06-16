@@ -29,6 +29,7 @@ using ITensorMPS: AbstractMPS
 import ITensors: ⊕
 
 include("ITensors.jl")
+include("utilities.jl")
 include("itensormap.jl")
 include("celledvectors.jl")
 include("abstractinfinitemps.jl")
@@ -79,6 +80,7 @@ export Cell,
   translator,
   tdvp,
   vumps,
+  itdvp_subspace_expansion,
   finite_mps,
   ⊕,
   ⊗,

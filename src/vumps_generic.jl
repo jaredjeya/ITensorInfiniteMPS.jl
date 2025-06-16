@@ -1,7 +1,7 @@
 using ITensorMPS: ITensorMPS, linkinds, tdvp, update_observer!, checkdone!
 using ITensors: δ, dag, noprime, prime
 using ITensors.NDTensors: denseblocks
-using KrylovKit: exponentiate
+using KrylovKit: exponentiate, KrylovDefaults
 
 struct Hᶜ{T}
   ∑h::InfiniteSum{T}
@@ -294,4 +294,155 @@ function ITensorMPS.tdvp(
     outputlevel,
     kwargs...,
   )
+end
+
+"""
+  tdvp_subspace_expansion(H, ψ; time_step, outer_iters, inner_iters, outputlevel=0, subspace_expansion_kwargs, tdvp_kwargs)
+
+Run infinite TDVP using the Hamiltonian and MPS supplied.
+This will alternate between a bond-by-bond subspace expansion,
+and 1-site TDVP.
+
+Once `subspace_expansion_kwargs[:maxdim]` is reached, switch to pure TDVP.
+
+# Arguments
+- `H`: The Hamiltonian to use in the time evolution
+- `ψ`: The initial state
+- `time_step`: Time step for each inner iteration.
+- `outer_iters`: Number of times to attempt to expand the bond dimension.
+- `inner_iters`: Number of timesteps to take in between expanding the bond dimension
+- `outputlevel`: Verbosity level: 1+ for outer loop output, 2+ for TDVP, expansion, & memory usage
+- `subspace_expansion_kwargs`: Keyword arguments to pass to `subspace_expansion`
+- `tdvp_kwargs`: Keyword arguments to pass to `tdvp`
+"""
+function itdvp_subspace_expansion(
+  H,
+  ψ;
+  time_step,
+  outer_iters,
+  inner_iters,
+  init_time=0.0,
+  outputlevel=0,
+  krylov_iters=100,
+  subspace_expansion_kwargs,
+  tdvp_kwargs,
+  save_func=nothing,
+)
+
+  cur_time = init_time
+  ITensorMPS.update_observer!(
+    tdvp_kwargs[:observer!];
+    state=ψ,
+    operator=H,
+    sweep=0,
+    outputlevel=(outputlevel - 1),
+    cur_time,
+  )
+
+  prev_krylov_iters = KrylovDefaults.maxiter[]
+
+  try
+    KrylovDefaults.maxiter[] = krylov_iters
+
+    total_time = @elapsed begin
+      outer_iter = 0
+      while outer_iter < outer_iters
+        if outputlevel > 0
+          @printf "\nSubspace expansion %d out of %d, starting from dimension %d\n" (
+            outer_iter + 1
+          ) outer_iters maxlinkdim(ψ)
+          @printf "cutoff = %.1e, maxdim = %d\n" subspace_expansion_kwargs[:cutoff] subspace_expansion_kwargs[:maxdim]
+        end
+
+        sub_time = @elapsed ψ = subspace_expansion(
+          ψ, H; outputlevel=(outputlevel - 1), subspace_expansion_kwargs...
+        )
+        outputlevel > 0 && @printf "\nSubspace expansion took %.2f seconds\n" sub_time
+
+        # Check if the bond dimension has saturated; TDVP takes some time to set up so we should now run it without stopping.
+        all(linkdims(ψ[0:(nsites(ψ) + 1)]) .== subspace_expansion_kwargs[:maxdim]) && break
+
+        if outputlevel > 0
+          @printf "Running iTDVP with new bond dimension %d\n\n" maxlinkdim(
+            ψ[0:(nsites(ψ) + 1)]
+          )
+        end
+
+        # TODO: add step observers (we have sweep observers)
+        tdvp_time = @elapsed ψ, cur_time, prec = tdvp(
+          H,
+          ψ;
+          init_time=cur_time,
+          time_step,
+          maxiter=inner_iters,
+          outputlevel=(outputlevel - 1),
+          save_func,
+          catch_interrupt=false,
+          tdvp_kwargs...,
+        )
+        outputlevel > 0 && @printf "\niTDVP took %.2f seconds\n" tdvp_time
+
+        if outputlevel > 2
+          println()
+          # meminfo_julia()
+          meminfo_procfs()
+        end
+
+        if prec ≤ tdvp_kwargs[:tol]
+          outputlevel > 0 && @printf "\niTDVP converged early with precision %.2e\n" prec
+          break
+        end
+
+        outer_iter += 1
+      end
+
+      if outer_iter < outer_iters
+        remain_iters = (outer_iters - outer_iter) * inner_iters
+        if outputlevel > 0
+          @printf "\nBond dimension saturated at %d\n" maxlinkdim(ψ)
+          @printf "Running iTDVP for %d more iterations\n" remain_iters
+        end
+        tdvp_time = @elapsed ψ, cur_time, prec = tdvp(
+          H,
+          ψ;
+          init_time=cur_time,
+          time_step,
+          maxiter=remain_iters,
+          outputlevel=(outputlevel - 1),
+          save_func,
+          tdvp_kwargs...,
+        )
+
+        outputlevel > 0 && @printf "\niTDVP took %.2f seconds\n" tdvp_time
+
+        if outputlevel > 2
+          println()
+          meminfo_procfs()
+        end
+      end
+    end
+
+    outputlevel > 0 &&
+      @printf "\nTotal time for iTDVP + subspace expansion: %.2f seconds\n" total_time
+
+    if outputlevel > 1
+      println()
+      meminfo_julia()
+    end
+
+  catch e
+    isa(e, InterruptException) || rethrow(e)
+    if outputlevel > 0
+      println("\n!!! Caught interrupt, stopping VUMPS !!!")
+      flush(stdout)
+      flush(stderr)
+    end
+    isnothing(save_func) || save_func(ψ, tdvp_kwargs[:observer!].data)
+  finally
+    KrylovDefaults.maxiter[] = prev_krylov_iters
+  end
+
+  outputlevel > 0 && println()
+
+  return ψ
 end
