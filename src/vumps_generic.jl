@@ -170,7 +170,8 @@ function ITensorMPS.tdvp(
   solver_tol=(x -> x / 100),
   (observer!)=ITensorMPS.default_observer(),
   checkdone=ITensorMPS.default_checkdone(),
-  save_func=nothing
+  save_func=nothing,
+  catch_interrupt=false,
 )
   N = nsites(ψ)
   (ϵᴸ!) = fill(tol, nsites(ψ))
@@ -231,7 +232,7 @@ function ITensorMPS.tdvp(
       checkdone(; state=ψ, sweep=iter, outputlevel, observer=observer!)
     end
   catch e
-    isa(e, InterruptException) || rethrow()
+    catch_interrupt && isa(e, InterruptException) || rethrow()
     if outputlevel > 0
       @printf "Caught interrupt, stopping VUMPS.\n"
       flush(stdout)
