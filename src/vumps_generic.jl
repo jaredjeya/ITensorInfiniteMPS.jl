@@ -344,28 +344,52 @@ function itdvp_subspace_expansion(
   try
     KrylovDefaults.maxiter[] = krylov_iters
 
+    N = nsites(ψ)
+    bonddims::Union{Nothing, Vector{Int}} = nothing
+    prec = Inf
+    converged = false
+    
     total_time = @elapsed begin
       outer_iter = 0
       while outer_iter < outer_iters
         if outputlevel > 0
-          @printf "\nSubspace expansion %d out of %d, starting from dimension %d\n" (
-            outer_iter + 1
-          ) outer_iters maxlinkdim(ψ)
+          @printf "\nSubspace expansion %d out of %d, starting from dimension %d\n" (outer_iter + 1) outer_iters maxlinkdim(ψ[0:(N + 1)])
           @printf "cutoff = %.1e, maxdim = %d\n" subspace_expansion_kwargs[:cutoff] subspace_expansion_kwargs[:maxdim]
         end
 
         sub_time = @elapsed ψ = subspace_expansion(
-          ψ, H; outputlevel=(outputlevel - 1), subspace_expansion_kwargs...
+          ψ,
+          H;
+          outputlevel=(outputlevel - 1),
+          subspace_expansion_kwargs...,
         )
-        outputlevel > 0 && @printf "\nSubspace expansion took %.2f seconds\n" sub_time
-
-        # Check if the bond dimension has saturated; TDVP takes some time to set up so we should now run it without stopping.
-        all(linkdims(ψ[0:(nsites(ψ) + 1)]) .== subspace_expansion_kwargs[:maxdim]) && break
+        new_bond_dims = linkdims(ψ[0:(N + 1)])
 
         if outputlevel > 0
-          @printf "Running iTDVP with new bond dimension %d\n\n" maxlinkdim(
-            ψ[0:(nsites(ψ) + 1)]
-          )
+          @printf "\nSubspace expansion took %.2f seconds\n" sub_time
+          if outputlevel > 1
+            println("New bond dimensions: ", new_bond_dims)
+          end
+        end
+
+        if prec ≤ tdvp_kwargs[:tol] && all(bonddims .== new_bond_dims)
+          if outputlevel > 0
+            @printf "\niTDVP converged early with precision %.2e and dimension %d\n" prec maximum(new_bond_dims)
+          end
+          converged = true
+          bonddims = new_bond_dims
+          break
+        end
+
+
+        # Check if the bond dimension has saturated; TDVP takes some time to set up so we should now run it without stopping.
+        if all(new_bond_dims .== subspace_expansion_kwargs[:maxdim])
+          bonddims = new_bond_dims
+          break
+        end
+
+        if outputlevel > 0
+          @printf "Running iTDVP with new bond dimension %d\n\n" maximum(new_bond_dims)
         end
 
         # TODO: add step observers (we have sweep observers)
@@ -380,26 +404,26 @@ function itdvp_subspace_expansion(
           catch_interrupt=false,
           tdvp_kwargs...,
         )
-        outputlevel > 0 && @printf "\niTDVP took %.2f seconds\n" tdvp_time
+        bonddims = linkdims(ψ[0:(N + 1)])
 
-        if outputlevel > 2
-          println()
-          # meminfo_julia()
-          meminfo_procfs()
-        end
-
-        if prec ≤ tdvp_kwargs[:tol]
-          outputlevel > 0 && @printf "\niTDVP converged early with precision %.2e\n" prec
-          break
+        if outputlevel > 0
+          @printf "\niTDVP took %.2f seconds\n" tdvp_time
+          if outputlevel > 1
+            println("New bond dimensions: ", bonddims)
+            if outputlevel > 2
+              println()
+              meminfo_procfs()
+            end
+          end
         end
 
         outer_iter += 1
       end
 
-      if outer_iter < outer_iters
+      if !converged && outer_iter < outer_iters
         remain_iters = (outer_iters - outer_iter) * inner_iters
         if outputlevel > 0
-          @printf "\nBond dimension saturated at %d\n" maxlinkdim(ψ)
+          @printf "\nBond dimension saturated at %d\n" maximum(bonddims)
           @printf "Running iTDVP for %d more iterations\n" remain_iters
         end
         tdvp_time = @elapsed ψ, cur_time, prec = tdvp(
@@ -413,21 +437,23 @@ function itdvp_subspace_expansion(
           tdvp_kwargs...,
         )
 
-        outputlevel > 0 && @printf "\niTDVP took %.2f seconds\n" tdvp_time
-
-        if outputlevel > 2
-          println()
-          meminfo_procfs()
+        if outputlevel > 0
+          prec ≤ tdvp_kwargs[:tol] && @printf "\niTDVP converged with precision %.2e and linkdim %d\n" prec maxlinkdim(ψ[0:(N + 1)])
+          @printf "\niTDVP took %.2f seconds\n" tdvp_time
+          if outputlevel > 1
+            println("Final bond dimensions: ", linkdims(ψ[0:(N + 1)]))
+            if outputlevel > 2
+              println()
+              meminfo_procfs()
+            end
+          end
         end
+
       end
     end
 
-    outputlevel > 0 &&
+    if outputlevel > 0
       @printf "\nTotal time for iTDVP + subspace expansion: %.2f seconds\n" total_time
-
-    if outputlevel > 1
-      println()
-      meminfo_julia()
     end
 
   catch e

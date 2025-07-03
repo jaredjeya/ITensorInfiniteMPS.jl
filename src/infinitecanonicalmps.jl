@@ -62,7 +62,7 @@ function infsiteinds(s::Vector{<:Index}, translator=translatecelltags)
   return CelledVector(addtags(s, celltags(1)), translator)
 end
 
-shift_flux_to_zero(s::Vector{Index{Int}}, initestate::Function) = s
+shift_flux_to_zero(s::Vector{Index{Int}}, initstate::Function) = s
 shift_flux_to_zero(s::Vector{Index{Int}}, flux_density::QN) = s
 
 function shift_flux_to_zero(s::Vector{<:Index}, initstate::Function)
