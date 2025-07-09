@@ -131,7 +131,9 @@ end
 # Apply the operator as ⟨v̅|T (simple left multiplication, without conjugation)
 # This applies the ITensorMap tensors in reverse (maybe this is not always the best contraction
 # ordering)
-(v::ITensor * T::ITensorMap) = T.scalar * contract(pushfirst!(reverse(T.itensors, v))) #*(v, reverse(T)...)
+(v::ITensor * T::ITensorMap) = T.scalar * contract(pushfirst!(reverse(T.itensors), v)) #*(v, reverse(T)...)
+
+ITensors.inner(x::ITensor, T::ITensorMap, y::ITensor) = (dag(x) * T * y)[]
 
 # TODO: implement Base.iterate(::Base.Iterators.Reverse{MPS})
 
