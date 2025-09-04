@@ -226,6 +226,7 @@ function left_environment(∑h::InfiniteSum{MPO}, ψ::InfiniteCanonicalMPS; tol=
   δʳ(n) = δ(dag(r[n]), prime(r[n]))
   δˡ(n) = δ(l[n], l′[n])
   δˢ(n) = δ(dag(s[n]), prime(s[n]))
+
   hᴸ = Vector{ITensor}(undef, Nsites)
   for k in 1:Nsites
     hᴸ[k] =
@@ -253,7 +254,7 @@ function left_environment(∑h::InfiniteSum{MPO}, ψ::InfiniteCanonicalMPS; tol=
   eᴸ = [(hᴸ[k] * ψ.C[k] * δʳ(k) * ψ′.C[k])[] for k in 1:Nsites]
   for k in 1:Nsites
     # TODO: remove `denseblocks` once BlockSparse + DiagBlockSparse is supported
-    hᴸ[k] -= eᴸ[k] * denseblocks(δ(inds(hᴸ[k])))
+    hᴸ[k] -= eᴸ[k] * adapt(ITensors.datatype(hᴸ), denseblocks(δ(inds(hᴸ[k]))))
   end
 
   𝕙ᴸ = copy(hᴸ)
@@ -305,7 +306,7 @@ function right_environment(∑h::InfiniteSum{MPO}, ψ::InfiniteCanonicalMPS; tol
   hᴿ = InfiniteMPS(hᴿ)
   eᴿ = [(hᴿ[k] * ψ.C[k] * δˡ(k) * ψ′.C[k])[] for k in 1:Nsites]
   for k in 1:Nsites
-    hᴿ[k] -= eᴿ[k] * denseblocks(δ(inds(hᴿ[k])))
+    hᴿ[k] -= eᴿ[k] * adapt(ITensors.datatype(hᴿ), denseblocks(δ(inds(hᴿ[k]))))
   end
 
   𝕙ᴿ = copy(hᴿ)

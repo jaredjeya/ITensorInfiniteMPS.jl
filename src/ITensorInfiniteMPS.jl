@@ -28,6 +28,8 @@ import Base: getindex, length, setindex!, +, -, *
 using ITensorMPS: AbstractMPS
 import ITensors: ⊕
 
+using Adapt  # Adapt iMPS to GPU backends
+
 include("ITensors.jl")
 include("utilities.jl")
 include("itensormap.jl")
@@ -52,6 +54,7 @@ include("vumps_generic.jl")
 include("vumps_localham.jl")
 include("vumps_nonlocalham.jl")
 include("vumps_mpo.jl")
+include("adapt.jl")
 
 export Cell,
   CelledVector,

@@ -44,6 +44,8 @@ function (A::Aᴸ)(x)
   ψ̃ = prime(linkinds, ψᴴ)
   n = A.n
 
+  dtype = ITensors.datatype(ψ)
+
   N = length(ψ)
   #@assert n == N
 
@@ -58,7 +60,7 @@ function (A::Aᴸ)(x)
   end
   δˡ = δ(l[n], l′[n])
   δʳ = δ(r[n], r′[n])
-  xR = x * ψ.C[n] * ψ′.C[n] * dag(δʳ) * denseblocks(δˡ)
+  xR = x * ψ.C[n] * ψ′.C[n] * dag(δʳ) * adapt(dtype, denseblocks(δˡ))
   return xT - xR
 end
 
@@ -92,6 +94,8 @@ function (A::Aᴿ)(x)
   ψ̃ = prime(linkinds, ψᴴ)
   n = A.n
 
+  dtype = ITensors.datatype(ψ)
+
   N = length(ψ)
   @assert n == N
 
@@ -107,7 +111,7 @@ function (A::Aᴿ)(x)
   xT = translatecell(translator(ψ), xT, 1)
   δˡ = δ(l[n], l′[n])
   δʳ = δ(r[n], r′[n])
-  xR = x * ψ.C[n] * ψ′.C[n] * δˡ * denseblocks(dag(δʳ))
+  xR = x * ψ.C[n] * ψ′.C[n] * δˡ * adapt(dtype, denseblocks(dag(δʳ)))
   return xT - xR
 end
 

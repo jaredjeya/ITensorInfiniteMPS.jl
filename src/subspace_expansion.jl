@@ -167,6 +167,7 @@ end
 function subspace_expansion(
   ψ::InfiniteCanonicalMPS, H, b::Tuple{Int,Int}; maxdim, cutoff, atol=1e-2, outputlevel=0, kwargs...
 )
+  adapter = adapt(ITensors.datatype(ψ))
   n1, n2 = b
   lⁿ¹ = commoninds(ψ.AL[n1], ψ.C[n1])
   rⁿ¹ = commoninds(ψ.AR[n2], ψ.C[n1])
@@ -229,8 +230,10 @@ function subspace_expansion(
     dag(NR) => uniqueinds(NR, ψ.AR[n2]);
     tags=("Right",),
   )
+  ALⁿ¹ = adapter(ALⁿ¹)
+  ARⁿ² = adapter(ARⁿ²)
 
-  C = ITensor(dag(newl)..., dag(newr)...)
+  C = ITensor(0.0, dag(newl)..., dag(newr)...) |> adapter
   ψCⁿ¹ = permute(ψ.C[n1], lⁿ¹..., rⁿ¹...)
   for I in eachindex(ψ.C[n1])
     v = ψCⁿ¹[I]
@@ -239,7 +242,7 @@ function subspace_expansion(
     end
   end
   if nsites(ψ) == 1
-    ALⁿ² = ITensor(commoninds(C, ARⁿ²), uniqueinds(ALⁿ¹, ψ.AL[n1 - 1])...)
+    ALⁿ² = ITensor(0.0, commoninds(C, ARⁿ²), uniqueinds(ALⁿ¹, ψ.AL[n1 - 1])...) |> adapter
     il = only(uniqueinds(ALⁿ¹, ALⁿ²))
     ĩl = only(uniqueinds(ALⁿ², ALⁿ¹))
     for IV in eachindval(inds(ALⁿ¹))
@@ -249,7 +252,7 @@ function subspace_expansion(
         ALⁿ²[ĨV...] = v
       end
     end
-    ARⁿ¹ = ITensor(commoninds(C, ALⁿ¹), uniqueinds(ARⁿ², ψ.AR[n2 + 1])...)
+    ARⁿ¹ = ITensor(0.0, commoninds(C, ALⁿ¹), uniqueinds(ARⁿ², ψ.AR[n2 + 1])...) |> adapter
     ir = only(uniqueinds(ARⁿ², ARⁿ¹))
     ĩr = only(uniqueinds(ARⁿ¹, ARⁿ²))
     for IV in eachindval(inds(ARⁿ²))
@@ -276,7 +279,7 @@ function subspace_expansion(
     return (ALⁿ¹, ALⁿ²), C, (ARⁿ¹, ARⁿ²)
   else
     # Also expand the dimension of the neighboring MPS tensors
-    ALⁿ² = ITensor(dag(newl)..., uniqueinds(ψ.AL[n2], ψ.AL[n1])...)
+    ALⁿ² = ITensor(0.0, dag(newl)..., uniqueinds(ψ.AL[n2], ψ.AL[n1])...) |> adapter
 
     il = only(uniqueinds(ψ.AL[n2], ALⁿ²))
     ĩl = only(uniqueinds(ALⁿ², ψ.AL[n2]))
@@ -288,7 +291,7 @@ function subspace_expansion(
       end
     end
 
-    ARⁿ¹ = ITensor(dag(newr)..., uniqueinds(ψ.AR[n1], ψ.AR[n2])...)
+    ARⁿ¹ = ITensor(0.0, dag(newr)..., uniqueinds(ψ.AR[n1], ψ.AR[n2])...) |> adapter
 
     ir = only(uniqueinds(ψ.AR[n1], ARⁿ¹))
     ĩr = only(uniqueinds(ARⁿ¹, ψ.AR[n1]))
@@ -318,7 +321,7 @@ function subspace_expansion(
 end
 
 function subspace_expansion(ψ, H; kwargs...)
-  ψ = copy(ψ)
+  ψ = adapt(ITensors.datatype(ψ), copy(ψ))
   N = nsites(ψ)
   AL = ψ.AL
   C = ψ.C
