@@ -176,6 +176,7 @@ function ITensorMPS.tdvp(
   checkdone=ITensorMPS.default_checkdone(),
   save_func=nothing,
   catch_interrupt=false,
+  measure_every=1,
 )
   N = nsites(ψ)
   (ϵᴸ!) = fill(tol, nsites(ψ))
@@ -189,10 +190,12 @@ function ITensorMPS.tdvp(
   end
 
   cur_time = init_time
+  start_iter = round(Int, cur_time / time_step)
 
   try
+    iteration_time = 0.0
     for iter in 1:maxiter
-      iteration_time = @elapsed ψ, (eᴸ, eᴿ) = tdvp_iteration(
+      iteration_time += @elapsed ψ, (eᴸ, eᴿ) = tdvp_iteration(
         solver,
         ∑h,
         ψ;
@@ -205,15 +208,17 @@ function ITensorMPS.tdvp(
       )
       cur_time += time_step
 
-      update_observer!(observer!; state=ψ, operator=∑h, sweep=iter, outputlevel, cur_time)
+      if measure_every == 1 || (iter + start_iter) % measure_every == 0
+        update_observer!(observer!; state=ψ, operator=∑h, sweep=iter+start_iter, outputlevel, cur_time)
+      end
 
       ϵᵖʳᵉˢ = max(maximum(ϵᴸ!), maximum(ϵᴿ!))
       maxdimψ = maxlinkdim(ψ[0:(N + 1)])
-      if outputlevel > 0
+      if outputlevel > 0 && (measure_every == 1 || (iter + start_iter) % measure_every == 0)
         @printf(
           "VUMPS iteration %d (out of maximum %d). Bond dimension = %d, energy = (%s, %s), ϵᵖʳᵉˢ = %.3e, tol = %.1e, iteration time = %.2f seconds\n",
-          iter,
-          maxiter,
+          iter + start_iter,
+          maxiter + start_iter,
           maxdimψ,
           round.(real(eᴸ); digits=6),
           round.(real(eᴿ); digits=6),
@@ -221,20 +226,21 @@ function ITensorMPS.tdvp(
           tol,
           iteration_time
         )
+        iteration_time = 0.0
         flush(stdout)
         flush(stderr)
       end
 
       if ϵᵖʳᵉˢ < tol
         if outputlevel > 0
-          @printf "Precision error %.3e reached tolerance %.1e, stopping VUMPS after %d iterations (of a maximum %d).\n" ϵᵖʳᵉˢ tol iter maxiter
+          @printf "Precision error %.3e reached tolerance %.1e, stopping VUMPS after %d iterations (of a maximum %d).\n" ϵᵖʳᵉˢ tol (iter + start_iter) (maxiter + start_iter)
           flush(stdout)
           flush(stderr)
         end
         break
       end
 
-      checkdone(; state=ψ, sweep=iter, outputlevel, observer=observer!)
+      checkdone(; state=ψ, sweep=start_iter, outputlevel, observer=observer!)
     end
   catch e
     catch_interrupt && isa(e, InterruptException) || rethrow()
@@ -334,11 +340,12 @@ function itdvp_subspace_expansion(
 )
 
   cur_time = init_time
+  cur_iters = round(Int, cur_time / time_step)
   ITensorMPS.update_observer!(
     tdvp_kwargs[:observer!];
     state=ψ,
     operator=H,
-    sweep=0,
+    sweep=cur_iters,
     outputlevel=(outputlevel - 1),
     cur_time,
   )
@@ -424,6 +431,7 @@ function itdvp_subspace_expansion(
         outer_iter += 1
       end
 
+      # TESTME: measure only every n steps to save computation! Need to be careful with consistency in # of steps though.
       if !converged && outer_iter < outer_iters
         remain_iters = (outer_iters - outer_iter) * inner_iters
         if outputlevel > 0
@@ -474,5 +482,5 @@ function itdvp_subspace_expansion(
 
   outputlevel > 0 && println()
 
-  return ψ
+  return ψ, cur_time
 end
