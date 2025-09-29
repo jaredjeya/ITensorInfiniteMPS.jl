@@ -191,6 +191,7 @@ function ITensorMPS.tdvp(
 
   cur_time = init_time
   start_iter = round(Int, cur_time / time_step)
+  interrupted = false
 
   try
     iteration_time = 0.0
@@ -248,10 +249,11 @@ function ITensorMPS.tdvp(
       @printf "Caught interrupt, stopping VUMPS.\n"
       flush(stdout)
       flush(stderr)
+      interrupted = true
     end
     isnothing(save_func) || save_func(ψ, observer!)
   end
-  return ψ, cur_time, ϵᵖʳᵉˢ
+  return ψ, cur_time, ϵᵖʳᵉˢ, interrupted
 end
 
 function vumps_solver(M, time_step, v₀, solver_tol, eager=true)
@@ -329,7 +331,7 @@ function itdvp_subspace_expansion(
   H,
   ψ;
   time_step,
-  outer_iters,
+  total_iters,
   inner_iters,
   init_time=0.0,
   outputlevel=0,
@@ -359,81 +361,97 @@ function itdvp_subspace_expansion(
     bonddims::Union{Nothing, Vector{Int}} = nothing
     prec = Inf
     converged = false
+    interrupted = false
     
     total_time = @elapsed begin
-      outer_iter = 0
-      while outer_iter < outer_iters
-        if outputlevel > 0
-          @printf "\nSubspace expansion %d out of %d, starting from dimension %d\n" (outer_iter + 1) outer_iters maxlinkdim(ψ[0:(N + 1)])
-          @printf "cutoff = %.1e, maxdim = %d\n" subspace_expansion_kwargs[:cutoff] subspace_expansion_kwargs[:maxdim]
-        end
-
-        sub_time = @elapsed ψ = subspace_expansion(
-          ψ,
-          H;
-          outputlevel=(outputlevel - 1),
-          subspace_expansion_kwargs...,
-        )
-        new_bond_dims = linkdims(ψ[0:(N + 1)])
-
-        if outputlevel > 0
-          @printf "\nSubspace expansion took %.2f seconds\n" sub_time
-          if outputlevel > 1
-            println("New bond dimensions: ", new_bond_dims)
-          end
-        end
-
-        if prec ≤ tdvp_kwargs[:tol] && all(bonddims .== new_bond_dims)
+      while cur_iters < total_iters
+        try
+          
           if outputlevel > 0
-            @printf "\niTDVP converged early with precision %.2e and dimension %d\n" prec maximum(new_bond_dims)
+            @printf "\nSubspace expansion %d out of %d, starting from dimension %d\n" ((cur_iters ÷ inner_iters) + 1) (total_iters ÷ inner_iters) maxlinkdim(ψ[0:(N + 1)])
+            @printf "cutoff = %.1e, maxdim = %d\n" subspace_expansion_kwargs[:cutoff] subspace_expansion_kwargs[:maxdim]
           end
-          converged = true
-          bonddims = new_bond_dims
-          break
-        end
 
+          sub_time = @elapsed ψ = subspace_expansion(
+            ψ,
+            H;
+            outputlevel=(outputlevel - 1),
+            subspace_expansion_kwargs...,
+          )
+          new_bond_dims = linkdims(ψ[0:(N + 1)])
 
-        # Check if the bond dimension has saturated; TDVP takes some time to set up so we should now run it without stopping.
-        if all(new_bond_dims .== subspace_expansion_kwargs[:maxdim])
-          bonddims = new_bond_dims
-          break
-        end
-
-        if outputlevel > 0
-          @printf "Running iTDVP with new bond dimension %d\n\n" maximum(new_bond_dims)
-        end
-
-        # TODO: add step observers (we have sweep observers)
-        tdvp_time = @elapsed ψ, cur_time, prec = tdvp(
-          H,
-          ψ;
-          init_time=cur_time,
-          time_step,
-          maxiter=inner_iters,
-          outputlevel=(outputlevel - 1),
-          save_func,
-          catch_interrupt=false,
-          tdvp_kwargs...,
-        )
-        bonddims = linkdims(ψ[0:(N + 1)])
-
-        if outputlevel > 0
-          @printf "\niTDVP took %.2f seconds\n" tdvp_time
-          if outputlevel > 1
-            println("New bond dimensions: ", bonddims)
-            if outputlevel > 2
-              println()
-              meminfo_procfs()
+          if outputlevel > 0
+            @printf "\nSubspace expansion took %.2f seconds\n" sub_time
+            if outputlevel > 1
+              println("New bond dimensions: ", new_bond_dims)
             end
           end
+
+          if prec ≤ tdvp_kwargs[:tol] && all(bonddims .== new_bond_dims)
+            if outputlevel > 0
+              @printf "\niTDVP converged early with precision %.2e and dimension %d\n" prec maximum(new_bond_dims)
+            end
+            converged = true
+            bonddims = new_bond_dims
+            break
+          end
+
+
+          # Check if the bond dimension has saturated; TDVP takes some time to set up so we should now run it without stopping.
+          if all(new_bond_dims .== subspace_expansion_kwargs[:maxdim])
+            bonddims = new_bond_dims
+            break
+          end
+
+          if outputlevel > 0
+            @printf "Running iTDVP with new bond dimension %d\n\n" maximum(new_bond_dims)
+          end
+
+          # TODO: add step observers (we have sweep observers)
+          tdvp_time = @elapsed ψ, cur_time, prec, interrupted = tdvp(
+            H,
+            ψ;
+            init_time=cur_time,
+            time_step,
+            maxiter=inner_iters,
+            outputlevel=(outputlevel - 1),
+            save_func,
+            catch_interrupt=true,
+            tdvp_kwargs...,
+            measure_every=1,  # Measure every step while expanding the bond dimension. Must go after `tdvp_kwargs...`!
+          )
+          bonddims = linkdims(ψ[0:(N + 1)])
+
+          if outputlevel > 0
+            @printf "\niTDVP took %.2f seconds\n" tdvp_time
+            if outputlevel > 1
+              println("New bond dimensions: ", bonddims)
+              if outputlevel > 2
+                println()
+                meminfo_procfs()
+              end
+            end
+          end
+
+          cur_iters = round(Int, cur_time / time_step)
+
+        catch e
+          isa(e, InterruptException) || rethrow(e)
+          if outputlevel > 0
+            println("\n!!! Caught interrupt, stopping iTDVP + subspace expansion !!!")
+            flush(stdout)
+            flush(stderr)
+            interrupted = true
+          end
+          isnothing(save_func) || save_func(ψ, tdvp_kwargs[:observer!].data)
         end
 
-        outer_iter += 1
+        interrupted && break
       end
 
       # TESTME: measure only every n steps to save computation! Need to be careful with consistency in # of steps though.
-      if !converged && outer_iter < outer_iters
-        remain_iters = (outer_iters - outer_iter) * inner_iters
+      if !converged && !interrupted && cur_iters < total_iters
+        remain_iters = total_iters - cur_iters
         if outputlevel > 0
           @printf "\nBond dimension saturated at %d\n" maximum(bonddims)
           @printf "Running iTDVP for %d more iterations\n" remain_iters
@@ -445,6 +463,7 @@ function itdvp_subspace_expansion(
           time_step,
           maxiter=remain_iters,
           outputlevel=(outputlevel - 1),
+          catch_interrupt=true,
           save_func,
           tdvp_kwargs...,
         )
@@ -468,14 +487,14 @@ function itdvp_subspace_expansion(
       @printf "\nTotal time for iTDVP + subspace expansion: %.2f seconds\n" total_time
     end
 
-  catch e
-    isa(e, InterruptException) || rethrow(e)
-    if outputlevel > 0
-      println("\n!!! Caught interrupt, stopping VUMPS !!!")
-      flush(stdout)
-      flush(stderr)
-    end
-    isnothing(save_func) || save_func(ψ, tdvp_kwargs[:observer!].data)
+  # catch e
+  #   isa(e, InterruptException) || rethrow(e)
+  #   if outputlevel > 0
+  #     println("\n!!! Caught interrupt, stopping VUMPS !!!")
+  #     flush(stdout)
+  #     flush(stderr)
+  #   end
+  #   isnothing(save_func) || save_func(ψ, tdvp_kwargs[:observer!].data)
   finally
     KrylovDefaults.maxiter[] = prev_krylov_iters
   end
